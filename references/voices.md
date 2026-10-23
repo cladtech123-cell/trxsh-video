@@ -1,61 +1,90 @@
-# Voices
+# The voice: Google AI Studio, chosen by the user
 
-## edge-tts (default, free, no key)
+The final narration comes from Gemini TTS (Google AI Studio). edge-tts still runs once first: it
+is free, and it returns word timings with the audio, which is what lets a mark fire on a spoken
+word. The chosen voice then sets every beat's length (`narrate.py --clips`), and the edge-tts word
+times are scaled into each clip, so the picture is timed by the voice the viewer hears.
 
-`tools/narrate.py` uses Microsoft's neural voices through edge-tts and gets word timings with the
-audio, which is what lets marks fire on a spoken word. Uzbek: `uz-UZ-MadinaNeural` (female),
-`uz-UZ-SardorNeural` (male). Set `voice` and `rate` in script.json. Clips are cached by text +
-voice + rate, so only changed beats are re-synthesized.
+## The flow
 
-## Gemini TTS (e.g. Charon), without re-rendering
+```text
+script.json ─► narrate.py (edge-tts timing pass)
+            ─► ask: web panel or API?
+            ─► 3-4 samples of one sentence ─► user listens and picks a voice
+            ─► every beat in that voice (groups of ~8 per generation) ─► check the cuts
+            ─► narrate.py --clips narration/gemini-<voice> ─► events, mix, render
+```
 
-Gemini's voices (Charon: male, informative, lower pitch; others in AI Studio's speaker list) often
-sound more natural. Gemini does not officially list Uzbek; let the user judge a sample by ear
-before generating everything. The timeline stays the edge-tts one (it drives the picture), and the
-new clips are laid onto the same beat windows, so the picture is untouched.
+## 1. Ask the route (AskUserQuestion)
 
-### Route A: the API (preferred, free tier)
+| | AI Studio web panel | API |
+|---|---|---|
+| needs | the user signed in to AI Studio in their browser (AI Pro or free) | a key the user creates in AI Studio → API keys and sets as `GEMINI_API_KEY` themselves |
+| speed | slow: one generation and one download at a time | fast: a script |
+| limits | the page's own quota; "Quota limit reached" shows no reset time | free tier: 3 TTS requests a minute, about 10 a day (check AI Studio → Rate limit) |
+| downloads | each one needs the user's OK (ask once for the whole batch, with the count) | none |
+| clip checks | listen, or `--check` if a key is also set | `gemini_tts.py --check all` |
 
-1. The user creates a key in AI Studio (API keys) and sets it themself; never take or type a key:
-   ```bash
-   setx GEMINI_API_KEY "<key>"        # Windows, new terminals see it
-   export GEMINI_API_KEY="<key>"      # macOS / Linux
-   ```
-   In Git Bash on Windows read it from the user environment for the current shell:
-   `export GEMINI_API_KEY="$(powershell -NoProfile -Command '[Environment]::GetEnvironmentVariable("GEMINI_API_KEY","User")' | tr -d '\r\n')"`.
-   Keys may start with `AIza` or `AQ.`; both go in the `x-goog-api-key` header (a Bearer header
-   fails with "Expected OAuth 2 access token").
-2. Check the free limits in AI Studio → Rate limit (show all models). When this was written the
-   free tier gave `gemini-3.8-flash-tts` 3 requests a minute and **10 a day**.
-3. ```bash
-   python tools/gemini_tts.py --voice Charon --plan     # groups of ~8 beats: 94 beats = 12 requests
-   python tools/gemini_tts.py --voice Charon --max 1    # one group; listen to its clips first
-   python tools/gemini_tts.py --voice Charon            # the rest (stops cleanly on a 429)
-   python tools/gemini_tts.py --voice Charon --check all
-   python tools/voice_swap.py --voice Charon            # -> out/tutorials/tutorial-charon.mp4
-   ```
-   Several beats per request is what makes the free tier enough: the reply is one long audio that
-   gemini_tts.py cuts at the pauses that best fit the expected beat lengths. Each reply is saved
-   raw (`narration/gemini-charon/raw/`) before parsing, so a parsing bug never costs a request.
-4. `--check` transcribes each clip **on its own** with a Gemini text model and compares its first
-   and last words with the beat. Several clips in one transcription request come back shifted
-   (the model merges or splits clips), which looks exactly like a wrong cut: do not use that to
-   judge cuts. A CHECK on one clip that turns out to be one misheard word ("turklarda" for
-   "torglarda") is fine; listen to it.
-5. voice_swap.py speeds up (atempo) only clips longer than their window; it prints them (anything
-   above ~1.12x is audible: shorten that sentence in script.json and regenerate that beat).
+Never take, type or store the key. In Git Bash on Windows read the user's key into the shell with
+`export GEMINI_API_KEY="$(powershell -NoProfile -Command '[Environment]::GetEnvironmentVariable("GEMINI_API_KEY","User")' | tr -d '\r\n')"`.
+Keys may start with `AIza` or `AQ.`; both go in the `x-goog-api-key` header.
 
-### Route B: the AI Studio page in the browser
+## 2. Samples (3–4 voices, one sentence)
 
-If the user prefers their AI Studio subscription to an API key: open
-`aistudio.google.com/generate-speech`, pick the model and the voice (Speaker settings → Charon),
-paste one beat (or a group of beats) and Run, then Download (ask the user before downloading; files
-land in Downloads as "Generated Audio … .wav"). Move each into `narration/gemini-<voice>/<beat id>.wav`.
-Wait for the Run button to come back before downloading (the player shows a placeholder while
-generating), and check the file is new, not the previous one again. The page has its own quota
-("Quota limit reached"); its reset time is not shown. The API route is faster and more reliable.
+Same sentence in every sample, so the user compares voices, not texts: by default the first beat
+of the first chapter. Default voices: `Charon` (informative, lower pitch), `Sadaltager`
+(knowledgeable), `Kore` (firm), `Sulafat` (warm). Follow the user's wishes instead when they have
+any ("erkak ovozi", "yoshroq"); AI Studio's speaker list shows a one-word style for each of its
+30 voices (Puck upbeat, Fenrir excitable, Orus firm, Iapetus clear, Achird friendly, ...).
 
-## Speed ratio
+- API: `python tools/gemini_tts.py --samples` (or `--samples Charon Orus Iapetus Achird`, `--text "..."`).
+  One request per voice; files in `narration/voice-samples/<voice>.wav`.
+- Web panel: for each voice, generate the sentence (references/ai-studio-web.md), Download; then
+  `python tools/studio_collect.py --samples Charon Sadaltager Kore Sulafat` (newest downloads, in that order).
 
-A new voice speaks at its own pace. gemini_tts.py measures the median new/old duration ratio from
-the clips made so far (0.93 for Charon vs Madina +6 %) and uses it to predict beat lengths.
+Send the samples to the user (as files they can play), then ask them to choose: options = the
+voices, plus "boshqa ovozlar" (another round) and "bepul edge-tts ovozi" (no Google). Gemini does
+not officially list Uzbek; their ear decides.
+
+## 3. Every beat in the chosen voice
+
+API:
+```bash
+python tools/gemini_tts.py --voice Charon --plan     # the groups (~8 beats each); 94 beats = 12 requests
+python tools/gemini_tts.py --voice Charon --max 1    # one group: listen to its clips first
+python tools/gemini_tts.py --voice Charon            # the rest (stops cleanly on a 429: continue tomorrow)
+python tools/gemini_tts.py --voice Charon --check all
+```
+Web panel: paste ~8 beats per generation (the `tts` texts from `narration/timeline.json`,
+separated by blank lines), Run, Download, then
+`python tools/studio_collect.py --voice Charon --group <the ids in that generation>`.
+
+Several beats per generation is what makes the quotas enough: the reply is one long audio cut at
+the pauses that best fit the expected beat lengths. Each API reply is saved raw
+(`narration/gemini-<voice>/raw/`) before parsing, so a parsing bug never costs a request.
+
+`--check` transcribes each clip **on its own** with a Gemini text model and compares its first and
+last words with the beat. Several clips in one transcription request come back shifted between
+clips, which looks exactly like a wrong cut: do not judge cuts that way. One CHECK that turns out
+to be a misheard word ("turklarda" for "torglarda") is fine; listen to it.
+
+## 4. Time the video by that voice
+
+```bash
+python tools/narrate.py --clips narration/gemini-charon
+bash tools/build-tutorial.sh <name> narration/gemini-charon
+```
+narrate.py fails with the list of missing beats if any clip is missing. A new voice speaks at its
+own pace (Charon was 0.93x of Madina +6 %): the video simply gets that long.
+
+## Changing the voice after the render
+
+`python tools/voice_swap.py --voice <V>` lays new clips onto the existing timeline (atempo on any
+clip longer than its window; above ~1.12x is audible: shorten that sentence and regenerate it) and
+muxes onto `picture-only.mp4` with the video stream copied. Marks inside a beat keep the old
+voice's timing; beat starts match.
+
+## edge-tts fallback (free, no Google)
+
+`uz-UZ-SardorNeural` (male), `uz-UZ-MadinaNeural` (female); any voice from `edge-tts --list-voices`.
+Set `voice` and `rate` in script.json and run narrate.py without `--clips`.

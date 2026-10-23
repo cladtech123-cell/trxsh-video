@@ -4,7 +4,9 @@
 barcha funksiyalarini kirishdan sozlamalargacha qadam-baqadam tushuntiradigan ovozli video yasaydi.
 
 - Sayt ekranlari kodda (Remotion) aniq qayta chiziladi, faqat demo ma'lumotlar bilan.
-- Diktor har bir qadamni tushuntiradi: edge-tts (Madina yoki Sardor) yoki Gemini TTS (masalan, Charon).
+- Ovoz Google AI Studio'dan (Gemini TTS) olinadi. Skill bitta gapni 3–4 xil ovozda (masalan, Charon, Sadaltager, Kore, Sulafat) namuna qilib beradi, ovozni siz tanlaysiz.
+- Ovozni qanday yaratishni ham o'zingiz tanlaysiz: **AI Studio web panel** orqali (brauzerda, o'z akkauntingiz bilan) yoki **API** orqali (bepul kalit, tezroq).
+- Videoning vaqti tanlangan ovozning haqiqiy uzunligiga moslanadi. Google ishlatilmasa, bepul edge-tts ovozi ham bor.
 - Kursor bosadi va yozadi, kamera kerakli joyga yaqinlashadi, tushuntirilayotgan element halqa bilan belgilanadi.
 - Subtitrlar, bo'limlar chizig'i, har bo'lim uchun alohida MP4, SRT va QA hisobot chiqadi.
 - Ovozni tasvirni qayta render qilmasdan almashtirish mumkin.
@@ -32,7 +34,7 @@ Claude Code'ga oddiy so'z bilan yozing, masalan:
 Skill quyidagilarni bajaradi:
 1. Saytni brauzerda bo'lim-bo'lim o'rganadi. Saytga kirishni siz o'zingiz qilasiz.
 2. Loyihani ochadi va ekranlarni qayta chizadi.
-3. Ssenariy yozadi va ovozlashtiradi.
+3. Ssenariy yozadi. Keyin ovoz yaratish yo'lini (web panel yoki API) so'raydi, 3–4 ta ovoz namunasini yuboradi, siz tanlagan ovozda barcha gaplarni yaratadi.
 4. Avval sinov kliplarini, keyin to'liq videoni render qiladi.
 5. Videoni qismlarga bo'ladi va QA tekshiruvini o'tkazadi.
 
@@ -42,8 +44,10 @@ Qo'lda ishlatish:
 bash <cinetic>/scripts/new-film.sh films/mysite --fps 60 --size 1920x1080
 python <trxsh-video>/scripts/add_tutorial.py films/mysite
 cd films/mysite && . tools/env.sh
-python tools/narrate.py && npx tsx scripts/tutorial-events.ts
-bash tools/build-tutorial.sh mysite        # -> out/tutorials/mysite.mp4
+python tools/narrate.py                              # vaqt uchun dastlabki o'tish (edge-tts)
+python tools/gemini_tts.py --samples                 # 4 ta ovoz namunasi (API) -> narration/voice-samples/
+python tools/gemini_tts.py --voice Charon            # tanlangan ovozda barcha gaplar
+bash tools/build-tutorial.sh mysite narration/gemini-charon   # -> out/tutorials/mysite.mp4
 python tools/cut_parts.py out/tutorials/mysite.mp4
 ```
 

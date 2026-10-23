@@ -9,6 +9,8 @@ The key comes from GEMINI_API_KEY (the user creates it in AI Studio and sets it 
 never write a key into a file or a command line). Clips land in narration/gemini-<voice>/<beat>.wav;
 tools/voice_swap.py lays them on the timeline without touching the picture.
 
+    python tools/gemini_tts.py --samples              # one sentence in 4 voices -> narration/voice-samples/ (the user picks)
+    python tools/gemini_tts.py --samples Charon Puck  # other voices
     python tools/gemini_tts.py --plan                 # the groups, nothing sent
     python tools/gemini_tts.py --max 1                # one group first: listen, then the rest
     python tools/gemini_tts.py                        # every missing beat
@@ -98,11 +100,11 @@ def post(model, body, key, timeout):
     return urllib.request.urlopen(req, timeout=timeout).read()
 
 
-def tts(text, a, key, raw_path):
+def tts(text, voice, model, key, raw_path):
     body = {'contents': [{'parts': [{'text': text}]}],
             'generationConfig': {'responseModalities': ['AUDIO'],
-                                 'speechConfig': {'voiceConfig': {'prebuiltVoiceConfig': {'voiceName': a.voice}}}}}
-    raw = post(a.model, body, key, 600)
+                                 'speechConfig': {'voiceConfig': {'prebuiltVoiceConfig': {'voiceName': voice}}}}}
+    raw = post(model, body, key, 600)
     open(raw_path, 'wb').write(raw)
     part = json.loads(raw)['candidates'][0]['content']['parts'][0]['inlineData']
     data = base64.b64decode(part['data'])
@@ -140,6 +142,39 @@ def check(ids, beats, out, key):
     print(f'check: {len(ids) - len(bad)}/{len(ids)} match' + (f'; listen to {bad} (a CHECK can also be a misheard word)' if bad else ''))
 
 
+# A balanced first round for an instruction video: two lower, calm voices and two clear, warm ones.
+# AI Studio's speaker list describes each voice (Charon: informative, lower pitch); any name works.
+SAMPLE_VOICES = ['Charon', 'Sadaltager', 'Kore', 'Sulafat']
+
+
+def sample_text(tl):
+    """A typical instruction sentence: the first beat of the first chapter (intro and outro have no tag)."""
+    tagged = {s['id'] for s in tl['scenes'] if s['tag']}
+    return next((b['tts'] for b in tl['beats'] if b['scene'] in tagged), tl['beats'][0]['tts'])
+
+
+def samples(voices, text, model):
+    """One request per voice, the same sentence: the user compares voices, not sentences."""
+    key = os.environ.get('GEMINI_API_KEY') or sys.exit('gemini_tts: set GEMINI_API_KEY first (the user creates the key in AI Studio)')
+    out = os.path.join(ROOT, 'narration', 'voice-samples')
+    os.makedirs(out, exist_ok=True)
+    print(f'samples of: {text}')
+    for i, v in enumerate(voices):
+        dst = os.path.join(out, f'{v}.wav')
+        if os.path.exists(dst):
+            print(f'  {v}: kept {os.path.relpath(dst, ROOT)}')
+            continue
+        if i:
+            time.sleep(25)  # free tier: 3 requests a minute
+        try:
+            y, sr = tts(text, v, model, key, os.path.join(out, f'{v}.json'))
+        except urllib.error.HTTPError as e:
+            sys.exit(f'{v}: HTTP {e.code} {e.read().decode()[:300]}')
+        sf.write(dst, y, sr, subtype='PCM_16')
+        print(f'  {v}: {len(y) / sr:.1f} s -> {os.path.relpath(dst, ROOT)}')
+    print('next: send the samples to the user and let them choose; then generate every beat with --voice <choice>')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--voice', default='Charon')
@@ -150,10 +185,14 @@ def main():
     ap.add_argument('--plan', action='store_true')
     ap.add_argument('--check', nargs='+', help="beat ids, or 'all'")
     ap.add_argument('--selftest', action='store_true')
+    ap.add_argument('--samples', nargs='*', help='voices to sample (default: ' + ' '.join(SAMPLE_VOICES) + ')')
+    ap.add_argument('--text', help='the sample sentence (default: the first beat of the first chapter)')
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     tl = json.load(open(os.path.join(ROOT, 'narration', 'timeline.json'), encoding='utf-8'))
+    if a.samples is not None:
+        return samples(a.samples or SAMPLE_VOICES, a.text or sample_text(tl), a.model)
     beats = {b['id']: dict(b, dur=b['voiceEnd'] - b['voiceStart']) for b in tl['beats']}
     out = os.path.join(ROOT, 'narration', f'gemini-{a.voice.lower()}')
     raw_dir = os.path.join(out, 'raw')
@@ -178,7 +217,7 @@ def main():
             time.sleep(25)  # free tier: 3 requests a minute
         tag = f"{g[0]['id']}--{g[-1]['id']}"
         try:
-            y, sr = tts('\n\n'.join(e['tts'] for e in g), a, key, os.path.join(raw_dir, tag + '.json'))
+            y, sr = tts('\n\n'.join(e['tts'] for e in g), a.voice, a.model, key, os.path.join(raw_dir, tag + '.json'))
         except urllib.error.HTTPError as e:
             sys.exit(f'{tag}: HTTP {e.code} {e.read().decode()[:300]}')
         assert sr == SR, sr

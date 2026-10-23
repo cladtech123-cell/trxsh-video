@@ -6,8 +6,10 @@ the timeline knows when each word is spoken: beat lengths come from the real aud
 by text + voice + rate, so re-running after a script edit only re-synthesizes changed beats.
 
     python tools/narrate.py            # synthesize what changed, rebuild timeline + narration.wav
+    python tools/narrate.py --clips narration/gemini-charon   # the chosen AI Studio voice sets every beat's
+                                                              # length; edge-tts word timings are scaled into it
 """
-import asyncio, hashlib, json, os, re, subprocess, sys
+import argparse, asyncio, hashlib, json, os, re, subprocess, sys
 import numpy as np
 import soundfile as sf
 import edge_tts
@@ -85,10 +87,27 @@ def chunks(say, start, end):
     return out
 
 
+def trim(y, db=-45, keep=0.03):
+    """Drop the silence a TTS leaves around a clip."""
+    loud = np.flatnonzero(np.abs(y) > 10 ** (db / 20) * np.abs(y).max())
+    if not len(loud):
+        return y
+    k = int(keep * SR)
+    return y[max(0, loud[0] - k): loud[-1] + k]
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--clips', help='a folder of chosen-voice clips, <beat id>.wav (e.g. narration/gemini-charon): '
+                                    'beat lengths come from them; edge-tts only supplies the word timings, scaled to each clip')
+    a = ap.parse_args()
     S = json.load(open(SCRIPT, encoding='utf-8'))
     os.makedirs(AUDIO, exist_ok=True)
     voice, rate = S['voice'], S.get('rate', '+0%')
+    if a.clips:
+        missing = [b['id'] for sc in S['scenes'] for b in sc['beats'] if not os.path.exists(os.path.join(a.clips, b['id'] + '.wav'))]
+        if missing:
+            sys.exit(f'narrate: {len(missing)} clips missing in {a.clips}: {missing}')
     lead, pause, spause = S['lead'], S['pause'], S['scenePause']
     t = 0.0
     beats, scenes, track = [], [], []
@@ -116,6 +135,15 @@ def main():
             words = json.load(open(wj, encoding='utf-8'))
             y, sr = sf.read(wav)
             assert sr == SR, wav
+            if a.clips:  # the chosen voice: its real length times the beat; word times scale with it
+                clip = os.path.join(AUDIO, f"{b['id']}-{os.path.basename(os.path.normpath(a.clips))}.wav")
+                to_wav(os.path.join(a.clips, b['id'] + '.wav'), clip)
+                y2 = trim(sf.read(clip)[0])
+                loud = np.flatnonzero(np.abs(y) > 10 ** (-45 / 20) * np.abs(y).max())  # edge-tts speech span, its word clock
+                e0, e1 = loud[0] / SR, loud[-1] / SR
+                k = (len(y2) / SR - 0.06) / (e1 - e0)  # trim() keeps 0.03 s each side
+                words = [dict(w, t=max(0.0, 0.03 + (w['t'] - e0) * k), d=w['d'] * k) for w in words]
+                y, wav = y2, clip
             dur = len(y) / SR
             last = bi == len(sc['beats']) - 1
             v0 = t + lead
@@ -144,7 +172,8 @@ def main():
             t = end
         scenes.append({'id': sc['id'], 'title': sc['title'], 'tag': sc['tag'], 'start': round(s0, 3), 'end': round(t, 3)})
     total = t + 1.5  # the last word rings out over the end card
-    tl = {'fps': FPS, 'total': round(total, 3), 'frames': int(round(total * FPS)), 'voice': voice, 'scenes': scenes, 'beats': beats}
+    used = f'{voice} timings, voice from {os.path.basename(os.path.normpath(a.clips))}' if a.clips else voice
+    tl = {'fps': FPS, 'total': round(total, 3), 'frames': int(round(total * FPS)), 'voice': used, 'scenes': scenes, 'beats': beats}
     json.dump(tl, open(OUT_TL, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     mix = np.zeros(int(total * SR) + SR)
     for v0, y in track:

@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # The whole narrated tutorial: TTS -> timeline -> sound events -> mix -> render -> mux -> exports.
-#   bash tools/build-tutorial.sh [name]   ->  out/tutorials/<name>.mp4 (default: tutorial)
+#   bash tools/build-tutorial.sh [name] [voice clips dir]   ->  out/tutorials/<name>.mp4 (default: tutorial)
+#   e.g. bash tools/build-tutorial.sh mysite narration/gemini-charon   (the chosen AI Studio voice times the video)
 # A 60 fps render is slow (about 8-9 min of wall time per minute of video on an 8-core laptop):
 # run it in the background, and review test clips (tools/clip.sh) before the full render.
 set -e
 cd "$(dirname "$0")/.."
 . tools/env.sh
 NAME="${1:-tutorial}"
+CLIPS="${2:-}"
 mkdir -p out/tutorials
-python tools/narrate.py | grep -v '^tts ' || true
+python tools/narrate.py ${CLIPS:+--clips "$CLIPS"} | grep -v '^tts ' || true
 test -s narration/timeline.json
 npx tsx scripts/tutorial-events.ts
 python tools/mixdown.py --out out/tutorials/mix.wav
