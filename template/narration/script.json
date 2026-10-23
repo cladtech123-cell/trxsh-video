@@ -1,0 +1,56 @@
+{
+ "title": "Demo Market kabineti",
+ "voice": "uz-UZ-MadinaNeural",
+ "rate": "+6%",
+ "lead": 0.35,
+ "pause": 0.45,
+ "scenePause": 0.9,
+ "tts": {
+  "demo.example.uz": "demo nuqta example nuqta uz"
+ },
+ "scenes": [
+  {
+   "id": "intro", "title": "Kirish", "tag": "",
+   "beats": [
+    {"id": "intro.1", "say": "Bu videoda Demo Market kabinetidan qanday foydalanishni qadam-baqadam ko‘rib chiqamiz.", "show": "Logotip", "cam": "logo"}
+   ]
+  },
+  {
+   "id": "login", "title": "Kabinetga kirish", "tag": "Kirish",
+   "beats": [
+    {"id": "login.1", "say": "Kabinetga kirish uchun telefon raqamingizni kiriting.", "show": "Telefon raqam yoziladi", "cam": "login.card", "hl": "login.phone", "label": "1-qadam",
+     "cur": "login.phone", "act": "type", "key": "login.phone", "text": "90 123 45 67", "at": 1.0},
+    {"id": "login.2", "say": "So‘ng “Kirish” tugmasini bosing — kabinet ochiladi.", "show": "Kirish bosiladi, kabinet ochiladi", "cam": "login.card", "hl": "login.btn", "label": "2-qadam",
+     "marks": [{"w": "bosing", "cam": "wide", "cur": "login.btn", "act": "press", "set": {"page": "list"}}]}
+   ]
+  },
+  {
+   "id": "list", "title": "Buyurtmalar", "tag": "Buyurtmalar",
+   "beats": [
+    {"id": "list.1", "say": "Buyurtmalar bo‘limida barcha buyurtmalaringiz ro‘yxati turadi.", "show": "Jadval ajratiladi", "cam": "wide", "hl": "table"},
+    {"id": "list.2", "say": "Kerakli buyurtmani topish uchun qidiruvga mijoz ismini yozing.", "show": "Qidiruvga Aliyev yoziladi", "cam": "wide", "hl": "search",
+     "cur": "search", "act": "type", "key": "list.q", "text": "Aliyev", "at": 1.2},
+    {"id": "list.3", "say": "Yangi buyurtma qo‘shish uchun “Buyurtma qo‘shish” tugmasini bosing.", "show": "Qo‘shish oynasi ochiladi", "cam": "wide", "hl": "btn.add", "set": {"list.q": ""},
+     "marks": [{"w": "bosing", "cur": "btn.add", "act": "press", "set": {"list.modal": true}}]},
+    {"id": "list.4", "say": "Mijoz va summani kiriting, so‘ng “Saqlash” tugmasini bosing. Yangi buyurtma ro‘yxatning boshida paydo bo‘ladi.", "show": "Forma to‘ldiriladi va saqlanadi", "cam": "modal", "hl": "modal",
+     "cur": "f.client", "act": "type", "key": "list.f.client", "text": "Karimova D.", "at": 0.5,
+     "marks": [{"w": "summani", "cur": "f.sum", "act": "type", "key": "list.f.sum", "text": "300 000"},
+               {"w": "Saqlash", "cam": "wide", "hl": "row.0", "label": "Yangi", "cur": "btn.save", "act": "press", "set": {"list.modal": false, "list.saved": true}}]}
+   ]
+  },
+  {
+   "id": "settings", "title": "Sozlamalar", "tag": "Sozlamalar",
+   "beats": [
+    {"id": "settings.1", "say": "Sozlamalar bo‘limida bildirishnomalarni yoqish yoki o‘chirish mumkin.", "show": "Menyudan Sozlamalar ochiladi", "cam": "wide", "nav": "settings"},
+    {"id": "settings.2", "say": "Masalan, Telegram xabarlarini yoqish uchun shu tugmani bosing.", "show": "Telegram tugmasi yoqiladi", "cam": "card", "hl": "toggle.tg",
+     "marks": [{"w": "bosing", "cur": "toggle.tg", "act": "press", "set": {"set.tg": true}}]}
+   ]
+  },
+  {
+   "id": "outro", "title": "Yakun", "tag": "",
+   "beats": [
+    {"id": "outro.1", "say": "E’tiboringiz uchun rahmat!", "show": "Logotip va sayt manzili", "cam": "logo.end", "set": {"end": true}}
+   ]
+  }
+ ]
+}
