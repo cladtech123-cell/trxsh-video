@@ -96,7 +96,7 @@ def main():
     i0, i1 = int(a.t0 * SR), int((a.t1 or n / SR) * SR)
     mix = mix[i0:i1]
     meter = pyln.Meter(SR)
-    lufs = meter.integrated_loudness(mix)
+    lufs = meter.integrated_loudness(np.stack([mix, mix], axis=1))
     mix = mix * 10 ** ((TARGET - lufs) / 20)
     peak = np.abs(mix).max()
     ceil = 10 ** (-1.5 / 20)
@@ -108,7 +108,7 @@ def main():
     stereo = np.stack([mix, mix], axis=1)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     sf.write(a.out, stereo, SR, subtype='PCM_24')
-    print(f'mixdown: {len(mix) / SR:.1f} s, {meter.integrated_loudness(mix):.1f} LUFS, peak {20 * np.log10(np.abs(mix).max()):.1f} dBFS -> {os.path.relpath(a.out, ROOT)}')
+    print(f'mixdown: {len(mix) / SR:.1f} s, {meter.integrated_loudness(np.stack([mix, mix], axis=1)):.1f} LUFS, peak {20 * np.log10(np.abs(mix).max()):.1f} dBFS -> {os.path.relpath(a.out, ROOT)}')
 
 
 if __name__ == '__main__':
